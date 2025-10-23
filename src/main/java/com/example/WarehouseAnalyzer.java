@@ -1,7 +1,6 @@
 package com.example;
 
 import java.math.BigDecimal;
-import java.math.MathContext;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.*;
@@ -46,15 +45,15 @@ class WarehouseAnalyzer {
      * @param days number of days ahead to include (e.g., 3 includes today, 1, 2, and 3 days ahead)
      * @return list of Perishable items expiring within the window
      */
-    public List<Perishable> findProductsExpiringWithinDays(int days) {
+    public List<FoodProduct> findProductsExpiringWithinDays(int days) {
         LocalDate today = LocalDate.now();
         LocalDate end = today.plusDays(days);
-        List<Perishable> result = new ArrayList<>();
+        List<FoodProduct> result = new ArrayList<>();
         for (Product p : warehouse.getProducts()) {
-            if (p instanceof Perishable per) {
-                LocalDate exp = per.expirationDate();
+            if (p instanceof FoodProduct foodProduct) {
+                LocalDate exp = foodProduct.expirationDate();
                 if (!exp.isBefore(today) && !exp.isAfter(end)) {
-                    result.add(per);
+                    result.add(foodProduct);
                 }
             }
         }
@@ -219,7 +218,7 @@ class WarehouseAnalyzer {
         LocalDate today = LocalDate.now();
         for (Product p : warehouse.getProducts()) {
             BigDecimal discounted = p.price();
-            if (p instanceof Perishable per) {
+            if (p instanceof FoodProduct per) {
                 LocalDate exp = per.expirationDate();
                 long daysBetween = java.time.temporal.ChronoUnit.DAYS.between(today, exp);
                 if (daysBetween == 0) {
@@ -281,7 +280,7 @@ class WarehouseAnalyzer {
         BigDecimal averagePrice = totalProducts == 0 ? BigDecimal.ZERO : totalValue.divide(BigDecimal.valueOf(totalProducts), 2, RoundingMode.HALF_UP);
         int expiredCount = 0;
         for (Product p : items) {
-            if (p instanceof Perishable per && per.expirationDate().isBefore(LocalDate.now())) {
+            if (p instanceof FoodProduct per && per.expirationDate().isBefore(LocalDate.now())) {
                 expiredCount++;
             }
         }

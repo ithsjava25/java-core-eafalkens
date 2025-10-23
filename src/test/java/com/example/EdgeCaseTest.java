@@ -110,7 +110,7 @@ class EdgeCaseTest {
             warehouse.addProduct(nonPerishable);
 
             // Act
-            List<Perishable> expiringWithin3Days = analyzer.findProductsExpiringWithinDays(3);
+            List<FoodProduct> expiringWithin3Days = analyzer.findProductsExpiringWithinDays(3);
 
             // Assert
             assertThat(expiringWithin3Days)
