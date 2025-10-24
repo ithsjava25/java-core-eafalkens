@@ -1,6 +1,7 @@
 package com.example;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.UUID;
 
 public abstract class Product {
@@ -29,7 +30,7 @@ public abstract class Product {
     }
 
     public BigDecimal price() {
-        return price;
+        return price.setScale(2, RoundingMode.HALF_UP);
     }
 
     public void price(BigDecimal price) {
