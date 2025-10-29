@@ -13,11 +13,11 @@ import java.util.stream.Collectors;
  */
 class WarehouseAnalyzer {
     private final Warehouse warehouse;
-    
+
     public WarehouseAnalyzer(Warehouse warehouse) {
         this.warehouse = warehouse;
     }
-    
+
     // Search and Filter Methods
     /**
      * Finds all products whose price is within the inclusive range [minPrice, maxPrice].
@@ -37,7 +37,7 @@ class WarehouseAnalyzer {
         }
         return result;
     }
-    
+
     /**
      * Returns all perishable products that expire within the next {@code days} days counting from today,
      * including items that expire today, and excluding items already expired. Non-perishables are ignored.
@@ -46,21 +46,21 @@ class WarehouseAnalyzer {
      * @param days number of days ahead to include (e.g., 3 includes today, 1, 2, and 3 days ahead)
      * @return list of Perishable items expiring within the window
      */
-    public List<Perishable> findProductsExpiringWithinDays(int days) {
+    public List<FoodProduct> findProductsExpiringWithinDays(int days) {
         LocalDate today = LocalDate.now();
         LocalDate end = today.plusDays(days);
-        List<Perishable> result = new ArrayList<>();
+        List<FoodProduct> result = new ArrayList<>();
         for (Product p : warehouse.getProducts()) {
-            if (p instanceof Perishable per) {
-                LocalDate exp = per.expirationDate();
+            if (p instanceof FoodProduct foodProduct) {
+                LocalDate exp = foodProduct.expirationDate();
                 if (!exp.isBefore(today) && !exp.isAfter(end)) {
-                    result.add(per);
+                    result.add(foodProduct);
                 }
             }
         }
         return result;
     }
-    
+
     /**
      * Performs a case-insensitive partial name search.
      * Test expectation: searching for "milk" returns all products whose name contains that substring,
@@ -79,7 +79,7 @@ class WarehouseAnalyzer {
         }
         return result;
     }
-    
+
     /**
      * Returns all products whose price is strictly greater than the given price.
      * While not asserted directly by tests, this helper is consistent with price-based filtering.
@@ -96,7 +96,7 @@ class WarehouseAnalyzer {
         }
         return result;
     }
-    
+
     // Analytics Methods
     /**
      * Computes the average price per category using product weight as the weighting factor when available.
@@ -136,7 +136,7 @@ class WarehouseAnalyzer {
         }
         return result;
     }
-    
+
     /**
      * Identifies products whose price deviates from the mean by more than the specified
      * number of standard deviations. Uses population standard deviation over all products.
@@ -147,24 +147,43 @@ class WarehouseAnalyzer {
      */
     public List<Product> findPriceOutliers(double standardDeviations) {
         List<Product> products = warehouse.getProducts();
-        int n = products.size();
-        if (n == 0) return List.of();
-        double sum = products.stream().map(Product::price).mapToDouble(bd -> bd.doubleValue()).sum();
-        double mean = sum / n;
-        double variance = products.stream()
-                .map(Product::price)
-                .mapToDouble(bd -> Math.pow(bd.doubleValue() - mean, 2))
-                .sum() / n;
-        double std = Math.sqrt(variance);
-        double threshold = standardDeviations * std;
+        if (products.size() <= 1) return List.of();
+
+        double[] prices = products.stream()
+                .mapToDouble(p -> p.price().doubleValue())
+                .toArray();
+
+        double median = calculateMedian(prices);
+
+        double[] absoluteDeviations = new double[prices.length];
+        for (int i = 0; i < prices.length; i++) {
+            absoluteDeviations[i] = Math.abs(prices[i] - median);
+        }
+        double mad = calculateMedian(absoluteDeviations);
+
+        double threshold = standardDeviations * (mad * 1.4826); // Scale factor for normal distribution
+
         List<Product> outliers = new ArrayList<>();
-        for (Product p : products) {
-            double diff = Math.abs(p.price().doubleValue() - mean);
-            if (diff > threshold) outliers.add(p);
+        for (int i = 0; i < prices.length; i++) {
+            double modifiedZScore = Math.abs(prices[i] - median) / (mad * 1.4826);
+            if (modifiedZScore >= standardDeviations) {
+                outliers.add(products.get(i));
+            }
         }
         return outliers;
     }
-    
+
+    private double calculateMedian(double[] values) {
+        double[] sorted = values.clone();
+        Arrays.sort(sorted);
+        int n = sorted.length;
+        if (n % 2 == 0) {
+            return (sorted[n/2 - 1] + sorted[n/2]) / 2.0;
+        } else {
+            return sorted[n/2];
+        }
+    }
+
     /**
      * Groups all shippable products into ShippingGroup buckets such that each group's total weight
      * does not exceed the provided maximum. The goal is to minimize the number of groups and/or total
@@ -176,7 +195,7 @@ class WarehouseAnalyzer {
      */
     public List<ShippingGroup> optimizeShippingGroups(BigDecimal maxWeightPerGroup) {
         double maxW = maxWeightPerGroup.doubleValue();
-        List<Shippable> items = warehouse.shippableProducts();
+        List<Shippable> items = new ArrayList<>(warehouse.shippableProducts()); // ändrat
         // Sort by descending weight (First-Fit Decreasing)
         items.sort((a, b) -> Double.compare(Objects.requireNonNullElse(b.weight(), 0.0), Objects.requireNonNullElse(a.weight(), 0.0)));
         List<List<Shippable>> bins = new ArrayList<>();
@@ -201,7 +220,7 @@ class WarehouseAnalyzer {
         for (List<Shippable> bin : bins) groups.add(new ShippingGroup(bin));
         return groups;
     }
-    
+
     // Business Rules Methods
     /**
      * Calculates discounted prices for perishable products based on proximity to expiration.
@@ -219,7 +238,7 @@ class WarehouseAnalyzer {
         LocalDate today = LocalDate.now();
         for (Product p : warehouse.getProducts()) {
             BigDecimal discounted = p.price();
-            if (p instanceof Perishable per) {
+            if (p instanceof FoodProduct per) {
                 LocalDate exp = per.expirationDate();
                 long daysBetween = java.time.temporal.ChronoUnit.DAYS.between(today, exp);
                 if (daysBetween == 0) {
@@ -237,7 +256,7 @@ class WarehouseAnalyzer {
         }
         return result;
     }
-    
+
     /**
      * Evaluates inventory business rules and returns a summary:
      *  - High-value percentage: proportion of products considered high-value (e.g., price >= some threshold).
@@ -261,7 +280,7 @@ class WarehouseAnalyzer {
         int diversity = (int) items.stream().map(Product::category).distinct().count();
         return new InventoryValidation(percentage, diversity);
     }
-    
+
     /**
      * Aggregates key statistics for the current warehouse inventory.
      * Test expectation for a 4-item setup:
@@ -277,11 +296,11 @@ class WarehouseAnalyzer {
     public InventoryStatistics getInventoryStatistics() {
         List<Product> items = warehouse.getProducts();
         int totalProducts = items.size();
-        BigDecimal totalValue = items.stream().map(Product::price).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal totalValue = items.stream().map(Product::price).reduce(BigDecimal.ZERO, BigDecimal::add).setScale(2, RoundingMode.HALF_UP);
         BigDecimal averagePrice = totalProducts == 0 ? BigDecimal.ZERO : totalValue.divide(BigDecimal.valueOf(totalProducts), 2, RoundingMode.HALF_UP);
         int expiredCount = 0;
         for (Product p : items) {
-            if (p instanceof Perishable per && per.expirationDate().isBefore(LocalDate.now())) {
+            if (p instanceof FoodProduct per && per.expirationDate().isBefore(LocalDate.now())) {
                 expiredCount++;
             }
         }

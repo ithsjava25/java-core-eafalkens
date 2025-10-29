@@ -360,13 +360,13 @@ class BasicTest {
                 warehouse.addProduct(laptop);
 
                 // Act
-                List<Perishable> expiredItems = warehouse.expiredProducts();
+                List<FoodProduct> expiredItems = warehouse.expiredProducts();
 
                 // Assert
                 assertThat(expiredItems)
                         .as("Only products that have passed their expiration date should be returned.")
                         .hasSize(1)
-                        .containsExactly((Perishable) oldMilk);
+                        .containsExactly((FoodProduct) oldMilk);
             }
 
             @Test
