@@ -1,6 +1,7 @@
 package com.example;
 
 import java.math.BigDecimal;
+import java.math.MathContext;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.*;
@@ -146,22 +147,41 @@ class WarehouseAnalyzer {
      */
     public List<Product> findPriceOutliers(double standardDeviations) {
         List<Product> products = warehouse.getProducts();
-        int n = products.size();
-        if (n == 0) return List.of();
-        double sum = products.stream().map(Product::price).mapToDouble(bd -> bd.doubleValue()).sum();
-        double mean = sum / n;
-        double variance = products.stream()
-                .map(Product::price)
-                .mapToDouble(bd -> Math.pow(bd.doubleValue() - mean, 2))
-                .sum() / n;
-        double std = Math.sqrt(variance);
-        double threshold = standardDeviations * std;
+        if (products.size() <= 1) return List.of();
+
+        double[] prices = products.stream()
+                .mapToDouble(p -> p.price().doubleValue())
+                .toArray();
+
+        double median = calculateMedian(prices);
+
+        double[] absoluteDeviations = new double[prices.length];
+        for (int i = 0; i < prices.length; i++) {
+            absoluteDeviations[i] = Math.abs(prices[i] - median);
+        }
+        double mad = calculateMedian(absoluteDeviations);
+
+        double threshold = standardDeviations * (mad * 1.4826); // Scale factor for normal distribution
+
         List<Product> outliers = new ArrayList<>();
-        for (Product p : products) {
-            double diff = Math.abs(p.price().doubleValue() - mean);
-            if (diff > threshold) outliers.add(p);
+        for (int i = 0; i < prices.length; i++) {
+            double modifiedZScore = Math.abs(prices[i] - median) / (mad * 1.4826);
+            if (modifiedZScore >= standardDeviations) {
+                outliers.add(products.get(i));
+            }
         }
         return outliers;
+    }
+
+    private double calculateMedian(double[] values) {
+        double[] sorted = values.clone();
+        Arrays.sort(sorted);
+        int n = sorted.length;
+        if (n % 2 == 0) {
+            return (sorted[n/2 - 1] + sorted[n/2]) / 2.0;
+        } else {
+            return sorted[n/2];
+        }
     }
 
     /**
@@ -175,7 +195,7 @@ class WarehouseAnalyzer {
      */
     public List<ShippingGroup> optimizeShippingGroups(BigDecimal maxWeightPerGroup) {
         double maxW = maxWeightPerGroup.doubleValue();
-        List<Shippable> items = warehouse.shippableProducts();
+        List<Shippable> items = new ArrayList<>(warehouse.shippableProducts()); // ändrat
         // Sort by descending weight (First-Fit Decreasing)
         items.sort((a, b) -> Double.compare(Objects.requireNonNullElse(b.weight(), 0.0), Objects.requireNonNullElse(a.weight(), 0.0)));
         List<List<Shippable>> bins = new ArrayList<>();
